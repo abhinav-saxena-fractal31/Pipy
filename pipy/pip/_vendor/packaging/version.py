@@ -8,6 +8,7 @@ import itertools
 import re
 
 from ._structures import Infinity
+from typing import Tuple, Optional, Union
 
 
 __all__ = [
@@ -384,54 +385,82 @@ def _parse_local_version(local):
         )
 
 
-def _cmpkey(epoch, release, pre, post, dev, local):
-    # When we compare a release version, we want to compare it with all of the
-    # trailing zeros removed. So we'll use a reverse the list, drop all the now
-    # leading zeros until we come to something non zero, then take the rest
-    # re-reverse it back into the correct order and make it a tuple and use
-    # that for our sorting key.
-    release = tuple(
-        reversed(list(
-            itertools.dropwhile(
-                lambda x: x == 0,
-                reversed(release),
-            )
-        ))
-    )
+def _cmpkey(
+    epoch: int,
+    release: Tuple[int],
+    pre: Optional[str],
+    post: Optional[str],
+    dev: Optional[str],
+    local: Optional[Tuple[Union[int, str]]],
+) -> Tuple[
+    int, Tuple[int], Tuple[int, str], Tuple[int, str], Tuple[int, str], Union[Tuple]
+]:
+    """Generate a comparison key for sorting versions.
 
-    # We need to "trick" the sorting algorithm to put 1.0.dev0 before 1.0a0.
-    # We'll do this by abusing the pre segment, but we _only_ want to do this
-    # if there is not a pre or a post segment. If we have one of those then
-    # the normal sorting rules will handle this case correctly.
-    if pre is None and post is None and dev is not None:
-        pre = -Infinity
-    # Versions without a pre-release (except as noted above) should sort after
-    # those with one.
-    elif pre is None:
-        pre = Infinity
+    Args:
+        epoch: The epoch component of the version.
+        release: The release segment of the version.
+        pre: The pre-release component of the version.
+        post: The post-release component of the version.
+        dev: The development release component of the version.
+        local: The local version component of the version.
 
-    # Versions without a post segment should sort before those with one.
+    Returns:
+        The comparison key for sorting versions.
+    """
+
+    def reversed_release():
+        yield from itertools.dropwhile(lambda x: x == 0, reversed(release))
+
+    # Remove trailing zeros from the release component to create a more accurate sorting key.
+    release = tuple(reversed(list(reversed_release())))
+
+    # Set default values for the pre-release, post-release, and development release components when necessary.
+    if pre is None:
+        pre = Infinity if post or dev else -Infinity
+    elif pre in ("-Infinity", "+Infinity"):
+        pre = int(pre)
+    elif "-" in pre:
+        pre_parts = pre.split("-")
+        pre_l = pre_parts[0]
+        pre_n = int(pre_parts[1]) if len(pre_parts) == 2 else -Infinity
+        pre = (pre_l, pre_n)
+    else:
+        pre = (pre, -Infinity)
+
     if post is None:
         post = -Infinity
+    elif "-" in post:
+        post_parts = post.split("-")
+        post_l = post_parts[0]
+        post_n = int(post_parts[1]) if len(post_parts) == 2 else -Infinity
+        post = (post_l, post_n)
+    else:
+        post = (post, -Infinity)
 
-    # Versions without a development segment should sort after those with one.
     if dev is None:
         dev = Infinity
+    elif dev == "-Infinity":
+        dev = -Infinity
+    elif "-" in dev:
+        dev_parts = dev.split("-")
+        dev_l = dev_parts[0]
+        dev_n = int(dev_parts[1]) if len(dev_parts) == 2 else -Infinity
+        dev = (dev_l, dev_n)
+    else:
+        dev = (dev, -Infinity)
 
+    # Set default value for the local version component when necessary.
     if local is None:
-        # Versions without a local segment should sort before those with one.
         local = -Infinity
     else:
-        # Versions with a local segment need that segment parsed to implement
-        # the sorting rules in PEP440.
-        # - Alpha numeric segments sort before numeric segments
-        # - Alpha numeric segments sort lexicographically
-        # - Numeric segments sort numerically
-        # - Shorter versions sort before longer versions when the prefixes
-        #   match exactly
-        local = tuple(
-            (i, "") if isinstance(i, int) else (-Infinity, i)
-            for i in local
-        )
+        # Parse the local version component to implement the sorting rules specified in PEP 440.
+        local_parts = []
+        for i in local:
+            if isinstance(i, int):
+                local_parts.append((i, ""))
+            else:
+                local_parts.append((-Infinity, i))
+        local = tuple(local_parts)
 
     return epoch, release, pre, post, dev, local
