@@ -109,11 +109,21 @@ _legacy_version_component_re = re.compile(
 _legacy_version_replacement_map = {
     "pre": "c", "preview": "c", "-": "final-", "rc": "c", "dev": "@",
 }
+def _replace_legacy_component(component):
+    return _legacy_version_replacement_map.get(component, component)
 
 
 def _parse_version_parts(s):
+    """Parse the version string into individual version parts.
+
+    Args:
+        s (str): The version string to parse.
+
+    Yields:
+        str: Individual version parts.
+    """
     for part in _legacy_version_component_re.split(s):
-        part = _legacy_version_replacement_map.get(part, part)
+        part = _replace_legacy_component(part)
 
         if not part or part == ".":
             continue
