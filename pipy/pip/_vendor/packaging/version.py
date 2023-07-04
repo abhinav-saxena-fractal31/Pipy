@@ -313,37 +313,61 @@ class Version(_BaseVersion):
     @property
     def is_postrelease(self):
         return bool(self._version.post)
+def _parse_letter_version(letter: str, number: str) -> Tuple[str, int]:
+    """
+    Parse the letter version and number into a tuple.
 
+    Args:
+        letter: The letter component of the version.
+        number: The numeric component of the version.
 
-def _parse_letter_version(letter, number):
+    Returns:
+        A tuple containing the normalized letter version and the number converted to an integer.
+
+    Examples:
+        >>> _parse_letter_version("a", "2")
+        ("a", 2)
+
+        >>> _parse_letter_version("c", None)
+        ("rc", 0)
+    """
+
+    def normalize_letter_version(letter: str) -> str:
+        """
+        Normalize the letter version.
+
+        Args:
+            letter: The letter component of the version.
+
+        Returns:
+            The normalized letter version.
+        """
+        letter = letter.lower()
+
+        if letter == "alpha":
+            return "a"
+        elif letter == "beta":
+            return "b"
+        elif letter in ["c", "pre", "preview"]:
+            return "rc"
+        elif letter in ["rev", "r"]:
+            return "post"
+        else:
+            return letter
+
     if letter:
-        # We consider there to be an implicit 0 in a pre-release if there is
-        # not a numeral associated with it.
         if number is None:
             number = 0
 
-        # We normalize any letters to their lower case form
-        letter = letter.lower()
-
-        # We consider some words to be alternate spellings of other words and
-        # in those cases we want to normalize the spellings to our preferred
-        # spelling.
-        if letter == "alpha":
-            letter = "a"
-        elif letter == "beta":
-            letter = "b"
-        elif letter in ["c", "pre", "preview"]:
-            letter = "rc"
-        elif letter in ["rev", "r"]:
-            letter = "post"
+        letter = normalize_letter_version(letter)
 
         return letter, int(number)
+
     if not letter and number:
-        # We assume if we are given a number, but we are not given a letter
-        # then this is using the implicit post release syntax (e.g. 1.0-1)
         letter = "post"
-
         return letter, int(number)
+
+    return None, 0
 
 
 _local_version_seperators = re.compile(r"[\._-]")
